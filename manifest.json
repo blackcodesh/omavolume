@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "blackcode.omavolume",
+  "name": "OmaVolume",
+  "version": "1.0.0",
+  "author": "BlackCode",
+  "license": "MIT",
+  "description": "OmaVolume: one master volume for Omarchy. The bar widget and the volume keys set the output volume and keep every app stream (browser, YouTube, players) in sync",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "OmaVolume",
+    "description": "Master volume slider, output picker and per-app mixer; apps follow the master volume",
+    "category": "Audio",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

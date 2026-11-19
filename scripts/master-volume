@@ -1,0 +1,17 @@
+#!/bin/bash
+# Master volume: keys control the output volume (Omarchy's script + OSD),
+# and every app stream (browser, YouTube, players) is synced to 100%
+# so the master volume alone decides loudness.
+# Usage: master-volume <raise|lower|mute-toggle|+N|-N>
+
+omarchy-audio-output-volume "$@"
+
+sync_streams() {
+  local id
+  for id in $(LC_ALL=C pactl list short sink-inputs | awk '{print $1}'); do
+    pactl set-sink-input-mute "$id" 0
+    pactl set-sink-input-volume "$id" 100%
+  done
+}
+
+sync_streams

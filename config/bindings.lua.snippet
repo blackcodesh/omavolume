@@ -1,0 +1,6 @@
+-- Master volume: keys control output volume AND sync all app streams to 100%.
+o.rebind("XF86AudioRaiseVolume", "Volume up (master)", "master-volume raise", { locked = true, repeating = true })
+o.rebind("XF86AudioLowerVolume", "Volume down (master)", "master-volume lower", { locked = true, repeating = true })
+o.rebind("XF86AudioMute", "Mute (master)", "master-volume mute-toggle", { locked = true })
+o.rebind("ALT + XF86AudioRaiseVolume", "Volume up precise (master)", "master-volume +1", { locked = true, repeating = true })
+o.rebind("ALT + XF86AudioLowerVolume", "Volume down precise (master)", "master-volume -1", { locked = true, repeating = true })
