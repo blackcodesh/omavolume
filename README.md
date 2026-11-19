@@ -1,6 +1,6 @@
 # OmaVolume: one master volume for Omarchy
 
-![OmaVolume: one master volume for Omarchy](poster/13-alshareedah22-omavolume-detail.webp)
+![OmaVolume: one master volume for Omarchy](poster/13-blackcodesh-omavolume-detail.webp)
 
 Video in the browser ignores your volume keys? On Omarchy, apps and Bluetooth
 headsets can each keep their own volume, so the keys seem to do nothing.
