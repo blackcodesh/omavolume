@@ -501,17 +501,25 @@ Panel {
   // volume alone decides loudness (browser/YouTube can't stay quiet).
   property bool masterSync: true
 
+  // Streams below 100% are raised to 100%. Streams you boosted above 100% and every stream's
+  // mute state are left alone, so a muted tab stays muted and a boosted call stays boosted.
   function syncStreamsToMaster() {
     if (!masterSync) return
     for (var i = 0; i < candidateStreams.length; i++) {
       var n = candidateStreams[i]
       if (!n || !n.audio) continue
-      if (n.audio.volume !== 1.0) n.audio.volume = 1.0
-      if (n.audio.muted) n.audio.muted = false
+      if (n.audio.volume < 1.0) n.audio.volume = 1.0
     }
   }
 
-  onCandidateStreamsChanged: syncStreamsToMaster()
+  // A new stream's audio may not be ready the moment it appears: sync again shortly after the
+  // list changes (debounced, so a burst of streams runs once).
+  onCandidateStreamsChanged: { syncStreamsToMaster(); syncLater.restart() }
+  Timer {
+    id: syncLater
+    interval: 400
+    onTriggered: root.syncStreamsToMaster()
+  }
 
   function setOutputVolume(v) {
     if (!volumeSink || !volumeSink.audio) return outputVolume
