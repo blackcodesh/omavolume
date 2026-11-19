@@ -61,6 +61,8 @@ and Bluetooth; `./install.sh --no-restart` skips that. The installer does not en
 widget: run `omarchy plugin enable blackcode.omavolume` and, if you like, remove Omarchy's own
 audio widget from the bar.
 
+Also listed in the Omarchy plugin marketplace (https://plugins.omarchy.org): search for **OmaVolume**.
+
 ## Files
 
 | Path | What it is |
@@ -94,3 +96,7 @@ linked plugin has not been tested here).
 `Panel.qml` and `Model.js` are derived from Omarchy's built-in audio plugin (`omarchy.audio`,
 MIT, copyright David Heinemeier Hansson); the added code is MIT, copyright BlackCode. Tests for
 the key script and the installer (in a throwaway home folder): `bash tests/test-omavolume.sh`.
+
+## License
+
+MIT, see [LICENSE](LICENSE). `Panel.qml` and `Model.js` are derived from Omarchy's built-in audio plugin (MIT, copyright David Heinemeier Hansson); the added code is copyright BlackCode.
