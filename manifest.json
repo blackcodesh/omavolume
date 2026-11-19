@@ -2,14 +2,16 @@
   "schemaVersion": 1,
   "id": "blackcode.omavolume",
   "name": "OmaVolume",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": "BlackCode",
   "license": "MIT",
-  "description": "OmaVolume: one master volume for Omarchy. The bar widget and the volume keys set the output volume and keep every app stream (browser, YouTube, players) in sync",
+  "description": "OmaVolume: one master volume for Omarchy. The bar widget and the volume keys set the output volume and keep every app stream (browser, YouTube, players) in sync. Replaces Omarchy's own audio icon when enabled",
   "kinds": [
+    "service",
     "bar-widget"
   ],
   "entryPoints": {
+    "service": "Service.qml",
     "barWidget": "Panel.qml"
   },
   "barWidget": {

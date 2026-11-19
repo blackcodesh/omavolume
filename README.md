@@ -22,6 +22,17 @@ OmaVolume makes the output volume the only one that matters.
 
 **Compatibility:** works with Omarchy 4.5 (checked on 4.5.0-3: manifest validation, the plugin's own tests, and every Omarchy component, command and bar interface it uses).
 
+## What's new in 1.1.0
+
+- **One audio icon, not two.** Enabling OmaVolume (`omarchy plugin add ... --enable`) used to add its icon next to
+  Omarchy's own audio icon, so the bar showed two. Now, the first time it runs, OmaVolume takes the place of Omarchy's
+  audio icon, in the same spot (any bar section), and moves that icon's settings to the `plugins` list. It runs once:
+  if you later put Omarchy's icon back, nothing swaps it again. Undo it any time with
+  `python3 -I ~/.config/omarchy/plugins/blackcode.omavolume/omavolume unswap`; run
+  `omavolume setup --force` to do it again.
+- It changes `shell.json` safely: atomic, locked, re-checked just before the write, symlinks kept, and the first file it
+  changed is kept as `shell.json.omavolume-original` (plus the last 3 earlier versions).
+
 ## What's new in 1.0.1
 
 - The sync no longer unmutes streams, no longer pulls down a stream you boosted above 100%,
@@ -34,9 +45,10 @@ OmaVolume makes the output volume the only one that matters.
   lines no longer count as installed.
 - LICENSE now credits Omarchy; README lists the full uninstall and the Bluetooth setting's
   side effect on all Bluetooth devices. Tests: `bash tests/test-omavolume.sh`.
+
 ## Install
 
-The widget alone (the sync happens when you use the widget):
+The widget alone (the sync happens when you use the widget). It replaces Omarchy's own audio icon, so you do not get two:
 
 ```bash
 omarchy plugin add https://github.com/alshareedah22/omavolume --enable
@@ -58,8 +70,8 @@ there is kept as `...conf.bak-<time>`). It refuses to run if the plugin folder o
 already exists as a real folder or file, for example from `omarchy plugin add`: remove that
 first. When the Bluetooth setting changes it restarts WirePlumber, which briefly drops audio
 and Bluetooth; `./install.sh --no-restart` skips that. The installer does not enable the
-widget: run `omarchy plugin enable blackcode.omavolume` and, if you like, remove Omarchy's own
-audio widget from the bar.
+widget: run `omarchy plugin enable blackcode.omavolume`. The first time it runs, it replaces Omarchy's own audio
+icon on the bar, so there is a single audio icon (see "What's new in 1.1.0").
 
 Also listed in the Omarchy plugin marketplace (https://plugins.omarchy.org): search for **OmaVolume**.
 
@@ -68,6 +80,7 @@ Also listed in the Omarchy plugin marketplace (https://plugins.omarchy.org): sea
 | Path | What it is |
 |------|------------|
 | `manifest.json`, `Panel.qml`, `Model.js` | The bar widget, plugin id `blackcode.omavolume` |
+| `Service.qml`, `omavolume` | First-run setup: swaps Omarchy's audio icon for this one (`setup`, `unswap`) |
 | `scripts/master-volume` | What the volume keys run |
 | `config/bindings.lua.snippet` | Key bindings appended to `bindings.lua` |
 | `config/51-bluez-software-volume.conf` | WirePlumber fix for headsets that ignore hardware volume |
@@ -80,7 +93,10 @@ app streams (an edit to an installed copy is overwritten by `omarchy plugin upda
 
 ## Uninstall
 
+Put Omarchy's own audio icon back first, while the plugin is still installed:
+
 ```bash
+python3 -I ~/.config/omarchy/plugins/blackcode.omavolume/omavolume unswap
 omarchy plugin remove blackcode.omavolume
 ```
 
@@ -94,8 +110,9 @@ linked plugin has not been tested here).
 ## Credits and tests
 
 `Panel.qml` and `Model.js` are derived from Omarchy's built-in audio plugin (`omarchy.audio`,
-MIT, copyright David Heinemeier Hansson); the added code is MIT, copyright BlackCode. Tests for
-the key script and the installer (in a throwaway home folder): `bash tests/test-omavolume.sh`.
+MIT, copyright David Heinemeier Hansson); the added code is MIT, copyright BlackCode. Tests (all in
+throwaway folders): `bash tests/test-omavolume.sh` for the key script and the installer, and
+`python3 -I -m unittest discover -s tests -p "test_*.py"` for the setup tool.
 
 ## License
 

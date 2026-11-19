@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""omavolume: make OmaVolume take the place of Omarchy's own audio icon on the bar.
+
+  omavolume setup [--force] [shell.json]   what the plugin runs by itself when first enabled: the
+                                           bar's `omarchy.audio` widget becomes OmaVolume, in the same
+                                           place, so there is one audio icon, not two
+  omavolume unswap [shell.json]            put Omarchy's own audio widget back, in the same place
+
+The stock audio widget's own settings move to shell.json's plugins[] entry for omarchy.audio, where
+Omarchy keeps the settings of a widget that is not in the layout (unswap moves them back). Setup runs
+once: it leaves a marker, so removing OmaVolume's icon later (or running unswap) is never undone by a
+later start; `setup --force` runs it again on purpose. Every write is atomic, follows a symlinked
+shell.json, is locked against a second omavolume, and is re-checked just before it lands. The first
+file it ever changes is kept as shell.json.omavolume-original, plus the last 3 previous versions as
+shell.json.omavolume-<time>."""
+import fcntl
+import glob
+import json
+import os
+import sys
+import tempfile
+import time
+
+PLUGIN = "blackcode.omavolume"
+AUDIO = "omarchy.audio"
+DEFAULT = os.path.expanduser("~/.config/omarchy/shell.json")
+KEEP_BACKUPS = 3
+
+
+def fail(message):
+    print("omavolume: " + message, file=sys.stderr)
+    sys.exit(1)
+
+
+def parse(raw, path):
+    try:
+        config = json.loads(raw)
+    except ValueError as e:
+        fail(f"cannot read {path}: {e} (comments in shell.json are not supported); nothing was changed")
+    if not isinstance(config, dict):
+        fail("shell.json must hold a JSON object; nothing was changed")
+    bar = config.get("bar")
+    if isinstance(bar, dict) and "layout" in bar:
+        layout = bar["layout"]
+        if not isinstance(layout, dict):
+            fail("bar.layout must be an object; nothing was changed")
+        for name, value in layout.items():
+            if not isinstance(value, list):
+                fail(f"bar.layout.{name} must be a list; nothing was changed")
+    if "plugins" in config and not isinstance(config["plugins"], list):
+        fail("plugins must be a list; nothing was changed")
+    return config
+
+
+def read_config(path):
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except OSError as e:
+        fail(f"cannot read {path}: {e}")
+    return raw, parse(raw, path)
+
+
+def write_atomic(path, data, mode):
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".omavolume-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def keep_backups(path, raw, mode):
+    """The first file ever changed is kept for good; of the rest only the newest few stay."""
+    original = path + ".omavolume-original"
+    stamped = sorted(glob.glob(path + ".omavolume-2*"))
+    if not os.path.exists(original):
+        if stamped:
+            os.replace(stamped.pop(0), original)  # an older version of this plugin made these
+        else:
+            write_atomic(original, raw, mode)
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime()) + f"-{time.time_ns() % 1000000:06d}"
+    write_atomic(f"{path}.omavolume-{stamp}", raw, mode)
+    stamped = sorted(glob.glob(path + ".omavolume-2*"))
+    for old in stamped[:-KEEP_BACKUPS]:
+        try:
+            os.unlink(old)
+        except OSError:
+            pass
+
+
+def modify(path, change, attempts=3):
+    """Run `change(config)` on shell.json and write the result. `change` returns the new config,
+    or None when there is nothing to do. The write is locked against another omavolume and
+    re-checked: if the file changed between the read and the write (Omarchy saving, a second
+    monitor), the change is redone on the new content. Returns True if the file was written."""
+    path = os.path.realpath(path)
+    folder = os.environ.get("XDG_RUNTIME_DIR") or os.path.dirname(path)
+    with open(os.path.join(folder, "omavolume.lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        for _ in range(attempts):
+            raw, config = read_config(path)
+            updated = change(config)
+            if updated is None:
+                return False
+            text = (json.dumps(updated, indent=2, ensure_ascii=False) + "\n").encode()
+            if text == raw:
+                return False
+            mode = os.stat(path).st_mode & 0o777
+            with open(path, "rb") as f:
+                if f.read() != raw:
+                    continue  # changed under us: read again
+            keep_backups(path, raw, mode)
+            write_atomic(path, text, mode)
+            return True
+    fail("shell.json keeps changing; nothing was changed, try again")
+
+
+def layout_of(config):
+    bar = config.get("bar")
+    layout = bar.get("layout") if isinstance(bar, dict) else None
+    return layout if isinstance(layout, dict) else {}
+
+
+def find_entry(config, widget_id):
+    """(section, index) of the first layout entry with this id. Entries may be bare strings."""
+    for section, entries in layout_of(config).items():
+        for i, entry in enumerate(entries):
+            if (entry if isinstance(entry, str) else entry.get("id") if isinstance(entry, dict) else None) == widget_id:
+                return section, i
+    return None
+
+
+def own_entries(config):
+    found = []
+    for section, entries in layout_of(config).items():
+        for i, entry in enumerate(entries):
+            if entry == PLUGIN or (isinstance(entry, dict) and entry.get("id") == PLUGIN):
+                found.append((section, i))
+    return found
+
+
+def marker_for(path):
+    """Where "setup already ran" is kept: the state folder for the real shell.json, next to any other file
+    (so tests never touch the real state)."""
+    if os.path.realpath(path) == os.path.realpath(DEFAULT):
+        base = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
+        return os.path.join(base, "omavolume", "setup-done")
+    return path + ".omavolume-setup-done"
+
+
+def entry_id(entry):
+    return entry if isinstance(entry, str) else entry.get("id") if isinstance(entry, dict) else None
+
+
+def swapped(config):
+    """The stock audio entry becomes OmaVolume's, in the same place; the entry `omarchy plugin enable`
+    added is dropped. The stock widget's own settings move to plugins[]."""
+    out = json.loads(json.dumps(config))
+    layout = layout_of(out)
+    section, i = find_entry(out, AUDIO)
+    entry = layout[section][i]
+    extra = {k: v for k, v in entry.items() if k != "id"} if isinstance(entry, dict) else {}
+    layout[section][i] = {"id": PLUGIN}
+    if extra:
+        plugins = out.setdefault("plugins", [])
+        existing = next((p for p in plugins if isinstance(p, dict) and p.get("id") == AUDIO), None)
+        if existing is None:
+            plugins.append({"id": AUDIO, **extra})
+        else:
+            existing.update(extra)
+    for sec, index in sorted((p for p in own_entries(out) if p != (section, i)), reverse=True):
+        del layout[sec][index]
+    return out
+
+
+def setup(path, force=False):
+    marker = marker_for(path)
+    if os.path.exists(marker) and not force:
+        print("already set up")
+        return
+    state = {"enabled": False, "swapped": False}
+
+    def change(config):
+        if not own_entries(config):
+            return None                      # OmaVolume is not on the bar (not enabled): nothing to do
+        state["enabled"] = True
+        if find_entry(config, AUDIO) is None:
+            return None                      # Omarchy's own audio icon is not there: nothing to replace
+        state["swapped"] = True
+        return swapped(config)
+    modify(path, change)
+    if state["enabled"]:
+        os.makedirs(os.path.dirname(marker), exist_ok=True)
+        with open(marker, "w") as f:
+            f.write(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + "\n")
+    print("OmaVolume now replaces Omarchy's audio icon" if state["swapped"]
+          else "nothing to replace" if state["enabled"] else "OmaVolume is not on the bar")
+
+
+def unswap(path):
+    state = {"found": False}
+
+    def change(config):
+        copies = own_entries(config)
+        if not copies:
+            return None
+        state["found"] = True
+        out = json.loads(json.dumps(config))
+        layout = layout_of(out)
+        keep_audio = find_entry(out, AUDIO) is None
+        plugins = out.get("plugins", [])
+        moved = next((p for p in plugins if isinstance(p, dict) and p.get("id") == AUDIO), None)
+        extra = {k: v for k, v in moved.items() if k != "id"} if moved else {}
+        for n, (section, i) in enumerate(sorted(copies, reverse=True)):
+            if keep_audio and n == len(copies) - 1:
+                layout[section][i] = {"id": AUDIO, **extra} if extra else {"id": AUDIO}
+                if moved is not None:
+                    plugins.remove(moved)
+                    if not plugins:
+                        out.pop("plugins", None)
+            else:
+                del layout[section][i]
+        return out
+    modify(path, change)
+    print("Omarchy's audio icon is back" if state["found"] else "nothing to unswap")
+
+
+def main(argv):
+    args = [a for a in argv[1:] if a != "--force"]
+    force = "--force" in argv
+    if not args or args[0] in ("-h", "--help", "help"):
+        print(__doc__)
+        return
+    path = args[1] if len(args) > 1 else DEFAULT
+    if args[0] == "setup":
+        setup(path, force)
+    elif args[0] == "unswap":
+        unswap(path)
+    else:
+        fail(f"unknown command {args[0]!r}; try omavolume --help")
+
+
+if __name__ == "__main__":
+    main(sys.argv)

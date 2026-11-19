@@ -1386,4 +1386,25 @@ Panel {
       }
     }
   }
+
+  // First run: take the place of Omarchy's own audio icon (omavolume setup), so the bar has one audio
+  // icon, not two. Omarchy starts a plugin's service only at shell start, so right after
+  // `omarchy plugin enable` the widget does it: no marker yet means setup has not run. The marker is
+  // kept by the tool; with it present nothing is started.
+  readonly property string setupMarker: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/omavolume/setup-done"
+  FileView {
+    id: setupMarkerFile
+    path: root.setupMarker
+    printErrors: false
+    onLoadFailed: firstRunTimer.restart()
+  }
+  Timer {
+    id: firstRunTimer
+    interval: 1000
+    onTriggered: firstRun.running = true
+  }
+  Process {
+    id: firstRun
+    command: ["python3", "-I", decodeURIComponent(String(Qt.resolvedUrl("omavolume")).replace(/^file:\/\//, "")), "setup"]
+  }
 }
