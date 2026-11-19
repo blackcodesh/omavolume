@@ -22,6 +22,11 @@ OmaVolume makes the output volume the only one that matters.
 
 **Compatibility:** works with Omarchy 4.5 (checked on 4.5.0-3: manifest validation, the plugin's own tests, and every Omarchy component, command and bar interface it uses).
 
+## What's new in 1.1.1
+
+- Housekeeping: 1.1.0 accidentally included two Python bytecode files (`__pycache__`); they are removed and ignored.
+  No behaviour change. The install commands in this README now use the repository's current GitHub address.
+
 ## What's new in 1.1.0
 
 - **One audio icon, not two.** Enabling OmaVolume (`omarchy plugin add ... --enable`) used to add its icon next to
@@ -51,14 +56,14 @@ OmaVolume makes the output volume the only one that matters.
 The widget alone (the sync happens when you use the widget). It replaces Omarchy's own audio icon, so you do not get two:
 
 ```bash
-omarchy plugin add https://github.com/alshareedah22/omavolume --enable
+omarchy plugin add https://github.com/blackcodesh/omavolume --enable
 ```
 
 The whole thing (widget, volume keys, Bluetooth fix). Clone the repo and run the
 installer; it is safe to run again:
 
 ```bash
-git clone https://github.com/alshareedah22/omavolume
+git clone https://github.com/blackcodesh/omavolume
 cd omavolume && ./install.sh
 ```
 
