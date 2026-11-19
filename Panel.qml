@@ -515,6 +515,10 @@ Panel {
   // A new stream's audio may not be ready the moment it appears: sync again shortly after the
   // list changes (debounced, so a burst of streams runs once).
   onCandidateStreamsChanged: { syncStreamsToMaster(); syncLater.restart() }
+
+  // Any change of the output volume syncs the apps, whoever made it: the volume keys, this panel's
+  // slider, another app, pavucontrol. So there is nothing to set up for the keys (no bindings, no script).
+  onOutputVolumeChanged: { syncStreamsToMaster(); syncLater.restart() }
   Timer {
     id: syncLater
     interval: 400

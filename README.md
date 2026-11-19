@@ -13,14 +13,27 @@ OmaVolume makes the output volume the only one that matters.
   state (a muted tab stays muted) and the speaker-tuning stream. This is the "master"
   part: a stream you turn down in the per-app mixer goes back to 100% at the next volume
   change. Set `masterSync` to `false` (see Settings) to keep the mixer's levels.
-- **Volume keys**: `master-volume` runs Omarchy's own volume command (with its
-  on-screen popup) and does the same sync, reading the stream list once per key press.
-- **Bluetooth fix**: some headsets ignore the hardware (AVRCP) volume PipeWire sends,
-  so only mute worked. A small WirePlumber setting makes PipeWire apply the volume itself.
-  It applies to **every** Bluetooth device, not just the broken one: a headset whose own
-  buttons used to track the system volume will stop doing that. Delete the file to undo it.
+- **Volume keys, with nothing to set up**: the widget syncs the apps whenever the output volume
+  changes, whoever changed it: the volume keys, this panel's slider, another app, pavucontrol.
+  No key bindings and no script are needed.
+- **Bluetooth fix (optional)**: some headsets ignore the hardware (AVRCP) volume PipeWire sends,
+  so only mute works. `python3 -I ~/.config/omarchy/plugins/blackcode.omavolume/omavolume bluetooth on`
+  makes PipeWire apply the volume itself. It applies to **every** Bluetooth device, not just the broken
+  one (a headset whose own buttons used to track the system volume will stop doing that), which is
+  why it is not switched on for you. `bluetooth off` undoes it.
 
 **Compatibility:** works with Omarchy 4.5 (checked on 4.5.0-3: manifest validation, the plugin's own tests, and every Omarchy component, command and bar interface it uses).
+
+## What's new in 1.2.0
+
+- **Zero setup.** `omarchy plugin add ... --enable` is the whole install. The volume keys now sync the apps with no key
+  bindings and no `master-volume` script: the widget reacts to any change of the output volume. Tested on a real bar
+  with a playing stream: an app turned down to 30% or 25% went back to 100% on a volume change, through
+  `pactl` and through Omarchy's own volume command (what the default keys run); a muted app stayed muted; an app boosted
+  to 120% was left alone.
+- **Bluetooth fix is one command** (`omavolume bluetooth on|off|status`) instead of a git clone and an installer. It stays
+  opt-in because it changes every Bluetooth device.
+- `install.sh`, the `master-volume` script and the key bindings still work, and are now optional extras (see Install).
 
 ## What's new in 1.1.1
 
@@ -53,30 +66,25 @@ OmaVolume makes the output volume the only one that matters.
 
 ## Install
 
-The widget alone (the sync happens when you use the widget). It replaces Omarchy's own audio icon, so you do not get two:
-
 ```bash
 omarchy plugin add https://github.com/blackcodesh/omavolume --enable
 ```
 
-The whole thing (widget, volume keys, Bluetooth fix). Clone the repo and run the
-installer; it is safe to run again:
+That is all. The first time it runs, OmaVolume replaces Omarchy's own audio icon on the bar, so
+there is a single audio icon (see "What's new in 1.1.0"), and the volume keys sync the apps by
+themselves (see "What's new in 1.2.0"). Nothing else to install, bind or configure.
 
-```bash
-git clone https://github.com/blackcodesh/omavolume
-cd omavolume && ./install.sh
-```
+### Optional extras
 
-The installer links the plugin into `~/.config/omarchy/plugins/`, links
-`master-volume` into `~/.local/bin/`, adds the key bindings and a `SUPER + CTRL + A`
-binding that opens this widget's panel to `~/.config/hypr/bindings.lua` (once each;
-commented-out lines don't count), and installs the Bluetooth setting (a different file already
-there is kept as `...conf.bak-<time>`). It refuses to run if the plugin folder or script
-already exists as a real folder or file, for example from `omarchy plugin add`: remove that
-first. When the Bluetooth setting changes it restarts WirePlumber, which briefly drops audio
-and Bluetooth; `./install.sh --no-restart` skips that. The installer does not enable the
-widget: run `omarchy plugin enable blackcode.omavolume`. The first time it runs, it replaces Omarchy's own audio
-icon on the bar, so there is a single audio icon (see "What's new in 1.1.0").
+- **Bluetooth headsets that ignore the volume**: `omavolume bluetooth on` (see above), then
+  `systemctl --user restart wireplumber` or reconnect the headset once (`bluetooth on --restart`
+  restarts WirePlumber for you, which briefly drops audio and Bluetooth).
+- **`SUPER + CTRL + A` opening this panel**: Omarchy's own binding opens its own audio panel. To open this
+  one instead, clone the repo and run `./install.sh`. It links the plugin and the `master-volume` script into
+  place, adds the panel binding, and (for people who want it) the key bindings that run `master-volume`, which
+  are no longer needed for the sync. It also installs the Bluetooth setting. It is safe to run again and
+  refuses to run if the plugin folder or script already exists as a real folder or file (for example from
+  `omarchy plugin add`): remove that first. `./install.sh --no-restart` skips restarting WirePlumber.
 
 Also listed in the Omarchy plugin marketplace (https://plugins.omarchy.org): search for **OmaVolume**.
 
@@ -85,11 +93,11 @@ Also listed in the Omarchy plugin marketplace (https://plugins.omarchy.org): sea
 | Path | What it is |
 |------|------------|
 | `manifest.json`, `Panel.qml`, `Model.js` | The bar widget, plugin id `blackcode.omavolume` |
-| `Service.qml`, `omavolume` | First-run setup: swaps Omarchy's audio icon for this one (`setup`, `unswap`) |
-| `scripts/master-volume` | What the volume keys run |
-| `config/bindings.lua.snippet` | Key bindings appended to `bindings.lua` |
+| `Service.qml`, `omavolume` | First-run setup: swaps Omarchy's audio icon for this one (`setup`, `unswap`); the optional `bluetooth` command |
+| `scripts/master-volume` | Optional: what the key bindings from `install.sh` run (no longer needed for the sync) |
+| `config/bindings.lua.snippet` | Optional key and panel bindings appended to `bindings.lua` by `install.sh` |
 | `config/51-bluez-software-volume.conf` | WirePlumber fix for headsets that ignore hardware volume |
-| `install.sh` | Links everything into place |
+| `install.sh` | Optional: links everything into place and adds the bindings |
 
 ## Settings
 
@@ -105,12 +113,11 @@ python3 -I ~/.config/omarchy/plugins/blackcode.omavolume/omavolume unswap
 omarchy plugin remove blackcode.omavolume
 ```
 
-If you used `install.sh`, also: remove the "Master volume" block and the `SUPER + CTRL + A`
-(OmaVolume panel) line from `~/.config/hypr/bindings.lua` (Omarchy's own `SUPER + CTRL + A`
-binding comes back), delete `~/.config/wireplumber/wireplumber.conf.d/51-bluez-software-volume.conf`
-and restart WirePlumber, `rm ~/.local/bin/master-volume`, and delete the link
-`~/.config/omarchy/plugins/blackcode.omavolume` (only the link: `omarchy plugin remove` on a
-linked plugin has not been tested here).
+If you switched on the Bluetooth option, run `omavolume bluetooth off` before removing the plugin (then
+restart WirePlumber). If you used the optional `install.sh`, also remove the "Master volume" block and the
+`SUPER + CTRL + A` (OmaVolume panel) line from `~/.config/hypr/bindings.lua` (Omarchy's own binding comes back),
+`rm ~/.local/bin/master-volume`, and delete the link `~/.config/omarchy/plugins/blackcode.omavolume` (only the
+link: `omarchy plugin remove` on a linked plugin has not been tested here).
 
 ## Credits and tests
 

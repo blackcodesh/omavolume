@@ -5,6 +5,10 @@
                                            bar's `omarchy.audio` widget becomes OmaVolume, in the same
                                            place, so there is one audio icon, not two
   omavolume unswap [shell.json]            put Omarchy's own audio widget back, in the same place
+  omavolume bluetooth on|off|status [--restart]
+                                           optional: some Bluetooth headsets ignore the volume PipeWire
+                                           sends them (only mute works). `on` makes PipeWire apply the
+                                           volume itself, for EVERY Bluetooth device. Nothing else needs it
 
 The stock audio widget's own settings move to shell.json's plugins[] entry for omarchy.audio, where
 Omarchy keeps the settings of a widget that is not in the layout (unswap moves them back). Setup runs
@@ -22,6 +26,20 @@ import tempfile
 import time
 
 PLUGIN = "blackcode.omavolume"
+WIREPLUMBER_FILE = os.path.expanduser("~/.config/wireplumber/wireplumber.conf.d/51-bluez-software-volume.conf")
+WIREPLUMBER_CONF = """# Some Bluetooth headsets ignore the hardware (AVRCP) volume PipeWire sends,
+# so the volume keys had no effect. Force software volume instead.
+# Installed by `omavolume bluetooth on`; `omavolume bluetooth off` removes it.
+monitor.bluez.properties = {
+  bluez5.enable-hw-volume = false
+}
+monitor.bluez.rules = [
+  {
+    matches = [ { device.name = "~bluez_card.*" } ]
+    actions = { update-props = { bluez5.hw-volume = [ ] } }
+  }
+]
+"""
 AUDIO = "omarchy.audio"
 DEFAULT = os.path.expanduser("~/.config/omarchy/shell.json")
 KEEP_BACKUPS = 3
@@ -230,13 +248,49 @@ def unswap(path):
     print("Omarchy's audio icon is back" if state["found"] else "nothing to unswap")
 
 
+def bluetooth(action, restart):
+    """Opt-in: PipeWire applies the volume itself for every Bluetooth device (see --help)."""
+    present = os.path.exists(WIREPLUMBER_FILE)
+    same = present and open(WIREPLUMBER_FILE).read() == WIREPLUMBER_CONF
+    if action == "status":
+        print("on" if same else "on (a different file is in place)" if present else "off")
+        return
+    if action == "on":
+        if same:
+            print("already on")
+            return
+        os.makedirs(os.path.dirname(WIREPLUMBER_FILE), exist_ok=True)
+        if present:
+            os.replace(WIREPLUMBER_FILE, WIREPLUMBER_FILE + ".bak-" + time.strftime("%Y%m%d-%H%M%S"))
+        write_atomic(WIREPLUMBER_FILE, WIREPLUMBER_CONF.encode(), 0o644)
+        print("on")
+    elif action == "off":
+        if not present:
+            print("already off")
+            return
+        if not same:
+            fail(f"{WIREPLUMBER_FILE} is not the file `omavolume bluetooth on` wrote; delete it yourself if you want it gone")
+        os.unlink(WIREPLUMBER_FILE)
+        print("off")
+    else:
+        fail("usage: omavolume bluetooth on|off|status [--restart]")
+    if restart:
+        os.system("systemctl --user restart wireplumber")
+        print("WirePlumber restarted: audio and Bluetooth reconnect; reconnect your headset once")
+    else:
+        print("Applies after `systemctl --user restart wireplumber` (or reconnecting your headset)")
+
+
 def main(argv):
-    args = [a for a in argv[1:] if a != "--force"]
+    args = [a for a in argv[1:] if a not in ("--force", "--restart")]
     force = "--force" in argv
     if not args or args[0] in ("-h", "--help", "help"):
         print(__doc__)
         return
     path = args[1] if len(args) > 1 else DEFAULT
+    if args[0] == "bluetooth":
+        bluetooth(args[1] if len(args) > 1 else "status", "--restart" in argv)
+        return
     if args[0] == "setup":
         setup(path, force)
     elif args[0] == "unswap":

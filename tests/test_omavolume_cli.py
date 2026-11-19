@@ -181,6 +181,59 @@ class Hardening(Case):
         self.assertIn("مرحبا", open(self.path, encoding="utf-8").read())
 
 
+class Bluetooth(unittest.TestCase):
+    """`omavolume bluetooth on|off|status`: optional, and never touches the real WirePlumber config."""
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.file = os.path.join(self.home, ".config", "wireplumber", "wireplumber.conf.d", "51-bluez-software-volume.conf")
+
+    def tool(self, *args):
+        env = dict(os.environ, HOME=self.home, XDG_RUNTIME_DIR=tempfile.gettempdir())
+        return subprocess.run([sys.executable, "-I", SCRIPT, "bluetooth", *args], capture_output=True, text=True, env=env)
+
+    def test_off_by_default(self):
+        self.assertEqual(self.tool("status").stdout.strip(), "off")
+        self.assertFalse(os.path.exists(self.file))
+
+    def test_on_writes_the_setting_and_says_how_to_apply_it(self):
+        out = self.tool("on")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("bluez5.enable-hw-volume = false", open(self.file).read())
+        self.assertIn("restart wireplumber", out.stdout)
+        self.assertEqual(self.tool("status").stdout.strip(), "on")
+
+    def test_on_twice_changes_nothing(self):
+        self.tool("on")
+        before = open(self.file).read()
+        self.assertIn("already on", self.tool("on").stdout)
+        self.assertEqual(open(self.file).read(), before)
+
+    def test_a_different_file_is_kept_as_a_backup(self):
+        os.makedirs(os.path.dirname(self.file))
+        with open(self.file, "w") as f:
+            f.write("# mine\n")
+        self.tool("on")
+        backups = glob.glob(self.file + ".bak-*")
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(open(backups[0]).read(), "# mine\n")
+
+    def test_off_removes_only_its_own_file(self):
+        self.tool("on")
+        self.assertEqual(self.tool("off").returncode, 0)
+        self.assertFalse(os.path.exists(self.file))
+        self.assertIn("already off", self.tool("off").stdout)
+        os.makedirs(os.path.dirname(self.file), exist_ok=True)
+        with open(self.file, "w") as f:
+            f.write("# somebody else's file\n")
+        out = self.tool("off")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertTrue(os.path.exists(self.file))
+
+    def test_a_bad_action_is_refused(self):
+        self.assertNotEqual(self.tool("sideways").returncode, 0)
+
+
 class MarkerLocation(unittest.TestCase):
     def test_the_real_shell_json_keeps_its_marker_in_the_state_folder(self):
         loader = importlib.machinery.SourceFileLoader("omavolume_tool", SCRIPT)
