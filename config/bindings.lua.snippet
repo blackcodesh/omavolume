@@ -4,3 +4,6 @@ o.rebind("XF86AudioLowerVolume", "Volume down (master)", "master-volume lower", 
 o.rebind("XF86AudioMute", "Mute (master)", "master-volume mute-toggle", { locked = true })
 o.rebind("ALT + XF86AudioRaiseVolume", "Volume up precise (master)", "master-volume +1", { locked = true, repeating = true })
 o.rebind("ALT + XF86AudioLowerVolume", "Volume down precise (master)", "master-volume -1", { locked = true, repeating = true })
+
+-- Open the OmaVolume panel (was: Omarchy's stock audio panel)
+o.rebind("SUPER + CTRL + A", "Audio (OmaVolume)", { panel = "blackcode.omavolume" })

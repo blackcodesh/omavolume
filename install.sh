@@ -15,9 +15,12 @@ cmp -s "$here/config/51-bluez-software-volume.conf" "$conf" 2>/dev/null || { cp 
 
 b=~/.config/hypr/bindings.lua
 if ! grep -q "master-volume raise" "$b" 2>/dev/null; then
-  { echo; cat "$here/config/bindings.lua.snippet"; } >> "$b"
-  hyprctl reload >/dev/null 2>&1 || true
+  { echo; sed '/Open the OmaVolume panel/,$d' "$here/config/bindings.lua.snippet"; } >> "$b"
 fi
+if ! grep -q 'panel = "blackcode.omavolume"' "$b" 2>/dev/null; then
+  { echo; sed -n '/Open the OmaVolume panel/,$p' "$here/config/bindings.lua.snippet"; } >> "$b"
+fi
+hyprctl reload >/dev/null 2>&1 || true
 
 if [[ $changed == 1 ]]; then
   systemctl --user restart wireplumber
