@@ -68,6 +68,25 @@ check "a commented-out line does not block the real bindings" '[[ $(grep -vc "^-
 echo "# mine" >"$HOME/.config/wireplumber/wireplumber.conf.d/51-bluez-software-volume.conf"
 "$here/install.sh" --no-restart >/dev/null 2>&1
 check "a different WirePlumber file is backed up first" 'grep -q "# mine" "$HOME"/.config/wireplumber/wireplumber.conf.d/51-bluez-software-volume.conf.bak-*'
+# a failed restart is reported and retried by the next run; a good one clears the retry
+unset XDG_STATE_HOME
+cat >"$T/bin/systemctl" <<'S'
+#!/bin/bash
+echo "systemctl $*" >>"$LOG"; exit "${FAKE_SYSTEMCTL:-0}"
+S
+chmod +x "$T/bin/systemctl"
+rm -f "$HOME"/.config/wireplumber/wireplumber.conf.d/51-bluez-software-volume.conf*
+rm -f "$HOME/.local/state/omavolume/wireplumber-restart-pending"
+: >"$LOG"; out=$(FAKE_SYSTEMCTL=1 "$here/install.sh" 2>&1); rc=$?
+check "a failed WirePlumber restart makes the installer fail and say so" '[[ $rc != 0 ]] && grep -q "failed" <<<"$out"'
+: >"$LOG"; out=$("$here/install.sh" 2>&1); rc=$?
+check "running it again retries the restart that failed" '[[ $rc == 0 ]] && grep -q "restart wireplumber" "$LOG"'
+: >"$LOG"; "$here/install.sh" >/dev/null 2>&1
+check "once restarted, a further run does not restart again" '! grep -q "restart wireplumber" "$LOG"'
+check "installer config is byte-identical to the CLI copy" 'python3 -I -c "
+import importlib.machinery as m,importlib.util as u,sys
+l=m.SourceFileLoader(\"o\",sys.argv[1]);s=u.spec_from_loader(\"o\",l);x=u.module_from_spec(s);l.exec_module(x)
+sys.exit(open(sys.argv[2]).read()!=x.WIREPLUMBER_CONF)" "$here/omavolume" "$here/config/51-bluez-software-volume.conf"'
 # a real folder (omarchy plugin add) must not be replaced or linked into
 rm "$HOME/.config/omarchy/plugins/blackcode.omavolume"; mkdir "$HOME/.config/omarchy/plugins/blackcode.omavolume"
 out=$("$here/install.sh" --no-restart 2>&1); rc=$?

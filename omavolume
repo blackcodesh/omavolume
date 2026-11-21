@@ -21,6 +21,7 @@ import fcntl
 import glob
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -248,8 +249,18 @@ def unswap(path):
     print("Omarchy's audio icon is back" if state["found"] else "nothing to unswap")
 
 
+def restart_wireplumber():
+    """Restart the user's WirePlumber. True only if systemctl really succeeded."""
+    try:
+        return subprocess.run(["systemctl", "--user", "restart", "wireplumber"]).returncode == 0
+    except OSError:
+        return False
+
+
 def bluetooth(action, restart):
-    """Opt-in: PipeWire applies the volume itself for every Bluetooth device (see --help)."""
+    """Opt-in: PipeWire applies the volume itself for every Bluetooth device (see --help).
+    An explicit --restart is always attempted, even when the file already is as asked, so a
+    restart that failed once can be retried; a failed restart makes the command fail."""
     present = os.path.exists(WIREPLUMBER_FILE)
     same = present and open(WIREPLUMBER_FILE).read() == WIREPLUMBER_CONF
     if action == "status":
@@ -258,24 +269,26 @@ def bluetooth(action, restart):
     if action == "on":
         if same:
             print("already on")
-            return
-        os.makedirs(os.path.dirname(WIREPLUMBER_FILE), exist_ok=True)
-        if present:
-            os.replace(WIREPLUMBER_FILE, WIREPLUMBER_FILE + ".bak-" + time.strftime("%Y%m%d-%H%M%S"))
-        write_atomic(WIREPLUMBER_FILE, WIREPLUMBER_CONF.encode(), 0o644)
-        print("on")
+        else:
+            os.makedirs(os.path.dirname(WIREPLUMBER_FILE), exist_ok=True)
+            if present:
+                os.replace(WIREPLUMBER_FILE, WIREPLUMBER_FILE + ".bak-" + time.strftime("%Y%m%d-%H%M%S"))
+            write_atomic(WIREPLUMBER_FILE, WIREPLUMBER_CONF.encode(), 0o644)
+            print("on")
     elif action == "off":
         if not present:
             print("already off")
-            return
-        if not same:
-            fail(f"{WIREPLUMBER_FILE} is not the file `omavolume bluetooth on` wrote; delete it yourself if you want it gone")
-        os.unlink(WIREPLUMBER_FILE)
-        print("off")
+        else:
+            if not same:
+                fail(f"{WIREPLUMBER_FILE} is not the file `omavolume bluetooth on` wrote; delete it yourself if you want it gone")
+            os.unlink(WIREPLUMBER_FILE)
+            print("off")
     else:
         fail("usage: omavolume bluetooth on|off|status [--restart]")
     if restart:
-        os.system("systemctl --user restart wireplumber")
+        if not restart_wireplumber():
+            fail("the setting is in place, but `systemctl --user restart wireplumber` failed; "
+                 "run it yourself, or run this command with --restart again")
         print("WirePlumber restarted: audio and Bluetooth reconnect; reconnect your headset once")
     else:
         print("Applies after `systemctl --user restart wireplumber` (or reconnecting your headset)")

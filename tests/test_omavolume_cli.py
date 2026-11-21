@@ -188,8 +188,23 @@ class Bluetooth(unittest.TestCase):
         self.home = tempfile.mkdtemp()
         self.file = os.path.join(self.home, ".config", "wireplumber", "wireplumber.conf.d", "51-bluez-software-volume.conf")
 
+    def fake_systemctl(self, status):
+        """A stand-in systemctl first on PATH, logging its calls; the real one is never run."""
+        bindir = os.path.join(self.home, "bin")
+        os.makedirs(bindir, exist_ok=True)
+        self.log = os.path.join(self.home, "systemctl.log")
+        with open(os.path.join(bindir, "systemctl"), "w") as f:
+            f.write(f'#!/bin/sh\necho "$@" >> "{self.log}"\nexit {status}\n')
+        os.chmod(os.path.join(bindir, "systemctl"), 0o755)
+        self.path_env = bindir + os.pathsep + os.environ["PATH"]
+
+    def calls(self):
+        return open(self.log).read().splitlines() if os.path.exists(self.log) else []
+
     def tool(self, *args):
         env = dict(os.environ, HOME=self.home, XDG_RUNTIME_DIR=tempfile.gettempdir())
+        if getattr(self, "path_env", None):
+            env["PATH"] = self.path_env
         return subprocess.run([sys.executable, "-I", SCRIPT, "bluetooth", *args], capture_output=True, text=True, env=env)
 
     def test_off_by_default(self):
@@ -232,6 +247,46 @@ class Bluetooth(unittest.TestCase):
 
     def test_a_bad_action_is_refused(self):
         self.assertNotEqual(self.tool("sideways").returncode, 0)
+
+    def test_a_failed_restart_is_an_error_not_a_success(self):
+        self.fake_systemctl(1)
+        out = self.tool("on", "--restart")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertNotIn("WirePlumber restarted", out.stdout)
+        self.assertIn("failed", out.stderr)
+        self.assertEqual(self.calls(), ["--user restart wireplumber"])
+
+    def test_a_restart_can_be_retried_when_the_setting_is_already_in_place(self):
+        self.fake_systemctl(1)
+        self.tool("on", "--restart")                 # file written, restart failed
+        self.fake_systemctl(0)                       # the service works now
+        out = self.tool("on", "--restart")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("already on", out.stdout)
+        self.assertIn("WirePlumber restarted", out.stdout)
+        self.assertEqual(self.calls(), ["--user restart wireplumber"] * 2)   # failed once, then retried
+
+    def test_off_with_restart_retries_too(self):
+        self.tool("on")
+        self.fake_systemctl(0)
+        self.tool("off", "--restart")
+        out = self.tool("off", "--restart")          # already off, restart still done
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(len(self.calls()), 2)
+
+    def test_no_restart_flag_never_runs_systemctl(self):
+        self.fake_systemctl(0)
+        self.tool("on")
+        self.assertEqual(self.calls(), [])
+
+    def test_the_installer_config_is_the_one_the_cli_writes_and_off_accepts(self):
+        shipped = open(os.path.join(ROOT, "config", "51-bluez-software-volume.conf")).read()
+        os.makedirs(os.path.dirname(self.file))
+        with open(self.file, "w") as f:
+            f.write(shipped)
+        self.assertEqual(self.tool("status").stdout.strip(), "on")
+        self.assertEqual(self.tool("off").returncode, 0)
+        self.assertFalse(os.path.exists(self.file))
 
 
 class MarkerLocation(unittest.TestCase):

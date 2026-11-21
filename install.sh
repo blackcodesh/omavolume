@@ -36,12 +36,14 @@ ln -sfn "$here" "$plugin"
 # Older name of this plugin: drop the link if present
 [[ -L ~/.config/omarchy/plugins/blackcode.audio ]] && rm ~/.config/omarchy/plugins/blackcode.audio || true
 
-# The WirePlumber file: keep a copy of a different file that was there before.
-changed=0
+# The WirePlumber file (identical to what `omavolume bluetooth on` writes): keep a copy of a different
+# file that was there before. A restart that did not happen (--no-restart, or it failed) is remembered in
+# a marker file, so running this again retries it instead of reporting "nothing to do".
+pending="${XDG_STATE_HOME:-$HOME/.local/state}/omavolume/wireplumber-restart-pending"
 if ! cmp -s "$here/config/51-bluez-software-volume.conf" "$conf" 2>/dev/null; then
   [[ -f $conf ]] && cp "$conf" "$conf.bak-$(date +%Y%m%d-%H%M%S)"
   cp "$here/config/51-bluez-software-volume.conf" "$conf"
-  changed=1
+  mkdir -p "$(dirname "$pending")"; : >"$pending"
 fi
 
 # Bindings: appended once. Commented-out lines do not count as installed.
@@ -54,13 +56,20 @@ if ! active 'panel = "blackcode.omavolume"'; then
 fi
 hyprctl reload >/dev/null 2>&1 || true
 
-if [[ $changed == 1 ]]; then
+status=0
+if [[ -e $pending ]]; then
   if [[ $restart == 1 ]]; then
-    systemctl --user restart wireplumber
-    echo "WirePlumber restarted (audio and Bluetooth reconnect): reconnect your headset once."
+    if systemctl --user restart wireplumber; then
+      rm -f "$pending"
+      echo "WirePlumber restarted (audio and Bluetooth reconnect): reconnect your headset once."
+    else
+      echo "install.sh: 'systemctl --user restart wireplumber' failed; the setting is installed but not applied. Run this installer again to retry." >&2
+      status=1
+    fi
   else
     echo "WirePlumber config installed. Run 'systemctl --user restart wireplumber' (or reconnect your headset) to apply it."
   fi
 fi
 omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
 echo "OmaVolume installed. Enable the widget with: omarchy plugin enable blackcode.omavolume"
+exit $status

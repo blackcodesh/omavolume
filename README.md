@@ -24,6 +24,17 @@ OmaVolume makes the output volume the only one that matters.
 
 **Compatibility:** works with Omarchy 4.5 (checked on 4.5.0-3: manifest validation, the plugin's own tests, and every Omarchy component, command and bar interface it uses).
 
+## What's new in 1.2.1
+
+- **A failed WirePlumber restart is no longer reported as done.** `omavolume bluetooth on|off --restart` now checks
+  that `systemctl --user restart wireplumber` really worked; if not, it says so and exits with an error. Running the
+  same command again retries the restart even when the setting is already in place (before, it stopped at "already
+  on" and the running audio kept the old setting).
+- `install.sh` does the same: a failed restart makes it fail, and the next run retries it (a small marker in
+  `~/.local/state/omavolume` remembers the restart is still owed).
+- The installer's WirePlumber file is now identical to the one `omavolume bluetooth on` writes, so
+  `omavolume bluetooth off` also removes a setting that `install.sh` put there.
+
 ## What's new in 1.2.0
 
 - **Zero setup.** `omarchy plugin add ... --enable` is the whole install. The volume keys now sync the apps with no key
